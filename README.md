@@ -1,12 +1,98 @@
-# React + Vite
+# Yarisugi Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+顧客データ、FAQ、ビジネスオペレーションを管理するための包括的なReactベースのダッシュボードアプリケーションです。
 
-Currently, two official plugins are available:
+## 機能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **顧客管理**: 詳細なフォームで顧客情報を追加・管理
+- **FAQビルダー**: AIアシスタンス付きでよくある質問を作成・整理
+- **データベース管理**: ナレッジベース用のドキュメントをアップロード・処理
+- **AI統合**: アップロードされたコンテンツから自動的にFAQを生成
+- **レポート機能**: 包括的なビジネスレポートを生成
+- **レスポンシブデザイン**: モバイルフレンドリーなインターフェースのモダンUI
 
-## Expanding the ESLint configuration
+## 技術スタック
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **フロントエンド**: React 19.1.0
+- **ビルドツール**: Vite 7.0.4
+- **スタイリング**: モダンデザインパターンを使用したCSS
+- **リンティング**: React固有のルールを含むESLint
+
+## はじめに
+
+### 前提条件
+
+- Node.js（バージョン16以上）
+- npmまたはyarn
+
+### インストール
+
+1. リポジトリをクローン:
+```bash
+git clone <repository-url>
+cd yarisugi-dashboard
+```
+
+2. 依存関係をインストール:
+```bash
+npm install
+```
+
+3. 開発サーバーを起動:
+```bash
+npm run dev
+```
+
+4. ブラウザを開いて `http://localhost:5173` にアクセス
+
+### 利用可能なスクリプト
+
+- `npm run dev` - ホットリロード付きで開発サーバーを起動
+- `npm run build` - 本番用にビルド
+- `npm run preview` - 本番ビルドをプレビュー
+- `npm run lint` - ESLintを実行してコード品質をチェック
+
+## プロジェクト構造
+
+```
+src/
+├── App.jsx                 # メインアプリケーションコンポーネント
+├── YarisugiDashboard.jsx   # コアダッシュボードコンポーネント
+├── main.jsx               # アプリケーションエントリーポイント
+├── index.css              # グローバルスタイル
+└── assets/                # 静的アセット
+```
+
+## 機能概要
+
+### 顧客管理
+- 包括的な情報で新しい顧客を追加
+- 顧客ステータスと営業担当者の割り当てを追跡
+- 顧客レポートを生成
+
+### FAQシステム
+- FAQの作成とカテゴリ分け
+- ドキュメントからのAI駆動FAQ生成
+- 検索・フィルター機能
+- カスタムカテゴリサポート
+
+### ドキュメント処理
+- 様々なファイル形式のアップロード
+- AI支援コンテンツ分析
+- アップロードされたコンテンツからの自動FAQ生成
+
+## コントリビューション
+
+1. リポジトリをフォーク
+2. 機能ブランチを作成 (`git checkout -b feature/amazing-feature`)
+3. 変更をコミット (`git commit -m 'Add some amazing feature'`)
+4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
+5. プルリクエストを作成
+
+## ライセンス
+
+このプロジェクトはプライベートでプロプライエタリです。
+
+## サポート
+
+サポートやご質問については、開発チームまでお問い合わせください。
