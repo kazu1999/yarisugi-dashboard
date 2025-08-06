@@ -1,4 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+// === 顧客管理API通信関数 ===
+const API_BASE = 'https://dwv8xlyuuk.execute-api.ap-northeast-1.amazonaws.com/prod';
+
+async function getCustomers() {
+  const res = await fetch(`${API_BASE}/customers`);
+  if (!res.ok) throw new Error('顧客一覧の取得に失敗しました');
+  return await res.json();
+}
+
+async function createCustomer(data) {
+  const res = await fetch(`${API_BASE}/customers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('顧客登録に失敗しました');
+  return await res.json();
+}
+
+async function getCustomerById(id) {
+  const res = await fetch(`${API_BASE}/customers/${id}`);
+  if (!res.ok) throw new Error('顧客詳細の取得に失敗しました');
+  return await res.json();
+}
+
+async function updateCustomer(id, data) {
+  const res = await fetch(`${API_BASE}/customers/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('顧客更新に失敗しました');
+  return await res.json();
+}
+
+async function deleteCustomer(id) {
+  const res = await fetch(`${API_BASE}/customers/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('顧客削除に失敗しました');
+  return await res.json();
+}
 
 const YarisugiDashboard = () => {
   const [activePage, setActivePage] = useState('top');
@@ -43,6 +84,73 @@ const YarisugiDashboard = () => {
     status: '新規'
   });
   const [showReport, setShowReport] = useState(false);
+
+  const [customers, setCustomers] = useState([]);
+
+  // 顧客管理用のstate
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [customerForm, setCustomerForm] = useState({
+    companyName: '', customerName: '', location: '', industry: '', siteUrl: '', snsStatus: '', lineId: '', email: '', salesPerson: '', status: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 顧客一覧取得
+  useEffect(() => {
+    getCustomers().then(setCustomers).catch(e => {
+      console.error(e);
+      setCustomers([]);
+    });
+  }, []);
+
+  // 顧客新規登録・編集モーダルを開く
+  const openNewCustomerModal = () => {
+    setEditingCustomer(null);
+    setCustomerForm({ companyName: '', customerName: '', location: '', industry: '', siteUrl: '', snsStatus: '', lineId: '', email: '', salesPerson: '', status: '' });
+    setShowCustomerModal(true);
+  };
+  const openEditCustomerModal = (customer) => {
+    setEditingCustomer(customer);
+    setCustomerForm({ ...customer });
+    setShowCustomerModal(true);
+  };
+  // 入力変更
+  const handleCustomerFormChange = (field, value) => {
+    setCustomerForm(prev => ({ ...prev, [field]: value }));
+  };
+  // 登録・更新
+  const handleCustomerSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      if (editingCustomer) {
+        await updateCustomer(editingCustomer.customerId, customerForm);
+      } else {
+        await createCustomer(customerForm);
+      }
+      setShowCustomerModal(false);
+      setEditingCustomer(null);
+      setCustomerForm({ companyName: '', customerName: '', location: '', industry: '', siteUrl: '', snsStatus: '', lineId: '', email: '', salesPerson: '', status: '' });
+      // 再取得
+      const list = await getCustomers();
+      setCustomers(list);
+    } catch (e) {
+      alert(e.message);
+    }
+    setIsSubmitting(false);
+  };
+  // 削除
+  const handleCustomerDelete = async (customer) => {
+    if (!window.confirm('本当に削除しますか？')) return;
+    setIsSubmitting(true);
+    try {
+      await deleteCustomer(customer.customerId);
+      const list = await getCustomers();
+      setCustomers(list);
+    } catch (e) {
+      alert(e.message);
+    }
+    setIsSubmitting(false);
+  };
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -245,40 +353,6 @@ const YarisugiDashboard = () => {
       <span>{label}</span>
     </div>
   );
-
-  // ダミー顧客データ（顧客一覧のモバイルカード用）
-  const customers = [
-    {
-      company: '株式会社テックソリューション',
-      domain: 'tech-solution.com',
-      person: '田中一郎',
-      email: 'tanaka@tech-solution.com',
-      industry: 'IT・通信',
-      status: '商談中',
-      owner: '山田太郎',
-      updated: '2024-01-15'
-    },
-    {
-      company: '株式会社グローバル商事',
-      domain: 'global-trading.co.jp',
-      person: '佐藤花子',
-      email: 'sato@global-trading.co.jp',
-      industry: '小売・流通',
-      status: '成約',
-      owner: '佐藤花子',
-      updated: '2024-01-12'
-    },
-    {
-      company: '株式会社製造工業',
-      domain: 'manufacturing.com',
-      person: '鈴木次郎',
-      email: 'suzuki@manufacturing.com',
-      industry: '製造業',
-      status: '新規',
-      owner: '鈴木一郎',
-      updated: '2024-01-10'
-    }
-  ];
 
   return (
     <div className="w-full min-h-screen bg-gray-50 font-sans text-gray-800">
@@ -733,7 +807,7 @@ const YarisugiDashboard = () => {
                   <h2 className="text-lg font-semibold text-gray-900">顧客リスト</h2>
                   <div className="flex gap-3 w-full sm:w-auto">
                     <input type="text" placeholder="顧客名・会社名で検索..." className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    <Button size="sm" className="w-28">新規登録</Button>
+                    <Button size="sm" className="w-28" onClick={openNewCustomerModal}>新規登録</Button>
                   </div>
                 </div>
 
@@ -743,18 +817,19 @@ const YarisugiDashboard = () => {
                     <div key={i} className="p-4">
                       <div className="flex items-start justify-between">
                         <div>
-                          <div className="font-semibold">{c.company}</div>
-                          <div className="text-sm text-gray-500">{c.domain}</div>
+                          <div className="font-semibold">{c.companyName}</div>
+                          <div className="text-sm text-gray-500">{c.siteUrl}</div>
                         </div>
                         <span className={`px-2 py-1 text-xs rounded-full ${c.status === '成約' ? 'bg-green-100 text-green-800' : c.status === '商談中' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{c.status}</span>
                       </div>
                       <div className="mt-2 text-sm">
-                        <div className="text-gray-700">{c.person} ・ {c.email}</div>
-                        <div className="text-gray-600 mt-1">{c.industry} / 担当: {c.owner}</div>
-                        <div className="text-gray-400 text-xs mt-1">最終更新: {c.updated}</div>
+                        <div className="text-gray-700">{c.customerName} ・ {c.email}</div>
+                        <div className="text-gray-600 mt-1">{c.industry} / 担当: {c.salesPerson}</div>
+                        <div className="text-gray-400 text-xs mt-1">最終更新: {c.updatedAt}</div>
                       </div>
                       <div className="mt-3">
-                        <Button size="sm" variant="secondary">編集</Button>
+                        <Button size="sm" variant="secondary" onClick={() => openEditCustomerModal(c)}>編集</Button>
+                        <Button size="sm" variant="danger" onClick={() => handleCustomerDelete(c)}>削除</Button>
                       </div>
                     </div>
                   ))}
@@ -771,20 +846,20 @@ const YarisugiDashboard = () => {
                       {customers.map((c, i) => (
                         <tr key={i} className="hover:bg-gray-50">
                           <Td>
-                            <div className="text-sm font-medium text-gray-900">{c.company}</div>
-                            <div className="text-sm text-gray-500">{c.domain}</div>
+                            <div className="text-sm font-medium text-gray-900">{c.companyName}</div>
+                            <div className="text-sm text-gray-500">{c.siteUrl}</div>
                           </Td>
                           <Td>
-                            <div className="text-sm text-gray-900">{c.person}</div>
+                            <div className="text-sm text-gray-900">{c.customerName}</div>
                             <div className="text-sm text-gray-500">{c.email}</div>
                           </Td>
                           <Td>{c.industry}</Td>
                           <Td>
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${c.status === '成約' ? 'bg-green-100 text-green-800' : c.status === '商談中' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{c.status}</span>
                           </Td>
-                          <Td>{c.owner}</Td>
-                          <Td className="text-gray-500">{c.updated}</Td>
-                          <Td><Button size="sm" variant="secondary">編集</Button></Td>
+                          <Td>{c.salesPerson}</Td>
+                          <Td className="text-gray-500">{c.updatedAt}</Td>
+                          <Td><Button size="sm" variant="secondary" onClick={() => openEditCustomerModal(c)}>編集</Button></Td>
                         </tr>
                       ))}
                     </tbody>
@@ -1024,6 +1099,28 @@ const YarisugiDashboard = () => {
           )}
         </div>
       </div>
+
+      {showCustomerModal && (
+        <Modal onClose={() => setShowCustomerModal(false)} title={editingCustomer ? '顧客編集' : '顧客新規登録'}>
+          <div className="space-y-4">
+            <FormGroup label="会社名"><Input value={customerForm.companyName} onChange={v => handleCustomerFormChange('companyName', v)} placeholder="株式会社〇〇" /></FormGroup>
+            <FormGroup label="担当者名"><Input value={customerForm.customerName} onChange={v => handleCustomerFormChange('customerName', v)} placeholder="田中一郎" /></FormGroup>
+            <FormGroup label="所在地"><Input value={customerForm.location} onChange={v => handleCustomerFormChange('location', v)} placeholder="東京都渋谷区" /></FormGroup>
+            <FormGroup label="業種"><Input value={customerForm.industry} onChange={v => handleCustomerFormChange('industry', v)} placeholder="IT・通信" /></FormGroup>
+            <FormGroup label="サイトURL"><Input value={customerForm.siteUrl} onChange={v => handleCustomerFormChange('siteUrl', v)} placeholder="https://example.com" /></FormGroup>
+            <FormGroup label="SNS運用状況"><Input value={customerForm.snsStatus} onChange={v => handleCustomerFormChange('snsStatus', v)} placeholder="例: 積極的に運用中" /></FormGroup>
+            <FormGroup label="LINE ID"><Input value={customerForm.lineId} onChange={v => handleCustomerFormChange('lineId', v)} placeholder="@example_line" /></FormGroup>
+            <FormGroup label="メールアドレス"><Input value={customerForm.email} onChange={v => handleCustomerFormChange('email', v)} placeholder="example@email.com" /></FormGroup>
+            <FormGroup label="担当営業"><Input value={customerForm.salesPerson} onChange={v => handleCustomerFormChange('salesPerson', v)} placeholder="山田太郎" /></FormGroup>
+            <FormGroup label="ステータス"><Input value={customerForm.status} onChange={v => handleCustomerFormChange('status', v)} placeholder="新規" /></FormGroup>
+            <div className="flex gap-3 pt-2">
+              <Button onClick={handleCustomerSubmit} disabled={isSubmitting}>{editingCustomer ? '更新' : '登録'}</Button>
+              {editingCustomer && <Button variant="danger" onClick={() => handleCustomerDelete(editingCustomer)} disabled={isSubmitting}>削除</Button>}
+              <Button variant="secondary" onClick={() => setShowCustomerModal(false)} disabled={isSubmitting}>キャンセル</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
