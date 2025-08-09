@@ -96,8 +96,22 @@ src/
 - 様々なファイル形式のアップロード
 - AI支援コンテンツ分析
 - アップロードされたコンテンツからの自動FAQ生成
+- **API連携**: DynamoDB + Lambda による完全なナレッジ管理
+  - ナレッジ一覧取得・検索・ソート（GET /knowledge）
+  - 新規ナレッジ作成（POST /knowledge）
+  - ナレッジ詳細取得・アクセス回数カウント（GET /knowledge/{id}）
+  - ナレッジ更新（PUT /knowledge/{id}）
+  - ナレッジ削除（DELETE /knowledge/{id}）
 
 ## 最近の更新
+
+### v1.3.0 - Knowledge API統合
+- **ナレッジ管理APIの実装**: AWS DynamoDB + Lambda + API Gatewayによる完全なナレッジ管理システム
+- **ファイルアップロード機能**: PDF、Word、Excel、PowerPointファイルの自動ナレッジ化
+- **高度な検索・フィルター**: カテゴリ、ファイルタイプ、全文検索、多様なソート機能
+- **アクセス統計**: ナレッジアクセス回数の自動カウント・トラッキング
+- **完全なCRUD操作**: ナレッジの作成・読み取り・更新・削除機能
+- **DynamoDB予約語対応**: 堅牢なAPI設計でエラー耐性を向上
 
 ### v1.2.0 - FAQ API統合
 - **FAQ管理APIの実装**: AWS DynamoDB + Lambda + API Gatewayによる完全なFAQ管理システム
@@ -143,6 +157,22 @@ src/
 - `sortBy`: ソート項目（createdAt、updatedAt、usageCount）
 - `sortOrder`: ソート順序（asc、desc）
 
+### Knowledge管理API
+- **ベースURL**: `https://sfp6spumkg.execute-api.ap-northeast-1.amazonaws.com/prod`
+- **エンドポイント**:
+  - `GET /knowledge` - ナレッジ一覧取得（クエリパラメータ: category, fileType, search, sortBy, sortOrder）
+  - `POST /knowledge` - 新規ナレッジ作成
+  - `GET /knowledge/{id}` - ナレッジ詳細取得（アクセス回数自動インクリメント）
+  - `PUT /knowledge/{id}` - ナレッジ更新
+  - `DELETE /knowledge/{id}` - ナレッジ削除
+
+#### Knowledgeクエリパラメータ
+- `category`: カテゴリフィルター（製品情報、価格・契約、技術情報、サポート）
+- `fileType`: ファイルタイプフィルター（PDF、Word、Excel、PowerPoint、テキスト）
+- `search`: 全文検索（タイトル・説明・タグ）
+- `sortBy`: ソート項目（createdAt、updatedAt、accessCount、fileSize）
+- `sortOrder`: ソート順序（asc、desc）
+
 ### データ構造
 
 #### 顧客データ
@@ -180,6 +210,27 @@ src/
 }
 ```
 
+#### Knowledgeデータ
+```json
+{
+  "knowledgeId": "string",
+  "title": "string",
+  "description": "string",
+  "category": "string",
+  "fileType": "string",
+  "fileUrl": "string",
+  "fileSize": "string",
+  "contentSummary": "string",
+  "tags": ["string"],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string",
+  "status": "string",
+  "accessCount": "number",
+  "lastAccessedAt": "string"
+}
+```
+
 ## AWS アーキテクチャ
 
 ### DynamoDB テーブル
@@ -187,6 +238,11 @@ src/
   - 主キー: `faqId` (String)
   - 課金モード: PAY_PER_REQUEST
   - 予約語対応: source, status, tags, comment, data, timestamp
+
+- **Knowledge テーブル**: 
+  - 主キー: `knowledgeId` (String)
+  - 課金モード: PAY_PER_REQUEST
+  - 予約語対応: status, data, timestamp, size
 
 ### Lambda 関数
 - **言語**: Python 3.13

@@ -89,6 +89,54 @@ async function deleteFaq(id) {
   return result.success;
 }
 
+// === Knowledge API通信関数 ===
+const KNOWLEDGE_API_BASE = 'https://sfp6spumkg.execute-api.ap-northeast-1.amazonaws.com/prod';
+
+async function getKnowledge(params = {}) {
+  const queryString = new URLSearchParams(params).toString();
+  const url = `${KNOWLEDGE_API_BASE}/knowledge${queryString ? `?${queryString}` : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('ナレッジ一覧の取得に失敗しました');
+  const result = await res.json();
+  return result.success ? result.data : [];
+}
+
+async function createKnowledge(data) {
+  const res = await fetch(`${KNOWLEDGE_API_BASE}/knowledge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('ナレッジ作成に失敗しました');
+  const result = await res.json();
+  return result.success ? result.data : null;
+}
+
+async function getKnowledgeById(id) {
+  const res = await fetch(`${KNOWLEDGE_API_BASE}/knowledge/${id}`);
+  if (!res.ok) throw new Error('ナレッジ詳細の取得に失敗しました');
+  const result = await res.json();
+  return result.success ? result.data : null;
+}
+
+async function updateKnowledge(id, data) {
+  const res = await fetch(`${KNOWLEDGE_API_BASE}/knowledge/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('ナレッジ更新に失敗しました');
+  const result = await res.json();
+  return result.success ? result.data : null;
+}
+
+async function deleteKnowledge(id) {
+  const res = await fetch(`${KNOWLEDGE_API_BASE}/knowledge/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('ナレッジ削除に失敗しました');
+  const result = await res.json();
+  return result.success;
+}
+
 const YarisugiDashboard = () => {
   const [activePage, setActivePage] = useState('top');
   const [showApproval, setShowApproval] = useState(false);
@@ -156,6 +204,20 @@ const YarisugiDashboard = () => {
   const [faqSortBy, setFaqSortBy] = useState('createdAt');
   const [faqSortOrder, setFaqSortOrder] = useState('desc');
 
+  // Knowledge管理用のstate
+  const [knowledge, setKnowledge] = useState([]);
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+  const [editingKnowledge, setEditingKnowledge] = useState(null);
+  const [knowledgeForm, setKnowledgeForm] = useState({
+    title: '', description: '', category: '製品情報', fileType: 'テキスト', fileUrl: '', fileSize: '', contentSummary: '', tags: [], createdBy: '', status: 'active'
+  });
+  const [isKnowledgeSubmitting, setIsKnowledgeSubmitting] = useState(false);
+  const [knowledgeSearchTerm, setKnowledgeSearchTerm] = useState('');
+  const [selectedKnowledgeCategory, setSelectedKnowledgeCategory] = useState('all');
+  const [selectedKnowledgeFileType, setSelectedKnowledgeFileType] = useState('all');
+  const [knowledgeSortBy, setKnowledgeSortBy] = useState('createdAt');
+  const [knowledgeSortOrder, setKnowledgeSortOrder] = useState('desc');
+
   // 顧客一覧取得
   useEffect(() => {
     getCustomers().then(setCustomers).catch(e => {
@@ -169,6 +231,11 @@ const YarisugiDashboard = () => {
     loadFaqs();
   }, [selectedFaqCategory, faqSortBy, faqSortOrder]);
 
+  // Knowledge一覧取得
+  useEffect(() => {
+    loadKnowledge();
+  }, [selectedKnowledgeCategory, selectedKnowledgeFileType, knowledgeSortBy, knowledgeSortOrder]);
+
   const loadFaqs = async () => {
     try {
       const params = {};
@@ -181,6 +248,23 @@ const YarisugiDashboard = () => {
     } catch (e) {
       console.error(e);
       setFaqs([]);
+    }
+  };
+
+  const loadKnowledge = async () => {
+    try {
+      const params = {};
+      if (selectedKnowledgeCategory !== 'all') params.category = selectedKnowledgeCategory;
+      if (selectedKnowledgeFileType !== 'all') params.fileType = selectedKnowledgeFileType;
+      if (knowledgeSearchTerm) params.search = knowledgeSearchTerm;
+      if (knowledgeSortBy) params.sortBy = knowledgeSortBy;
+      if (knowledgeSortOrder) params.sortOrder = knowledgeSortOrder;
+      
+      const knowledgeList = await getKnowledge(params);
+      setKnowledge(knowledgeList);
+    } catch (e) {
+      console.error(e);
+      setKnowledge([]);
     }
   };
 
@@ -484,6 +568,114 @@ const YarisugiDashboard = () => {
       alert(e.message);
     }
     setIsFaqSubmitting(false);
+  };
+
+  // Knowledge新規作成・編集モーダルを開く
+  const openNewKnowledgeModal = () => {
+    setEditingKnowledge(null);
+    setKnowledgeForm({ title: '', description: '', category: '製品情報', fileType: 'テキスト', fileUrl: '', fileSize: '', contentSummary: '', tags: [], createdBy: '', status: 'active' });
+    setShowKnowledgeModal(true);
+  };
+  
+  const openEditKnowledgeModal = (knowledge) => {
+    setEditingKnowledge(knowledge);
+    setKnowledgeForm({ ...knowledge });
+    setShowKnowledgeModal(true);
+  };
+
+  // Knowledge入力変更
+  const handleKnowledgeFormChange = (field, value) => {
+    setKnowledgeForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Knowledge登録・更新
+  const handleKnowledgeSubmit = async () => {
+    setIsKnowledgeSubmitting(true);
+    try {
+      if (editingKnowledge) {
+        await updateKnowledge(editingKnowledge.knowledgeId, knowledgeForm);
+      } else {
+        await createKnowledge(knowledgeForm);
+      }
+      setShowKnowledgeModal(false);
+      setEditingKnowledge(null);
+      setKnowledgeForm({ title: '', description: '', category: '製品情報', fileType: 'テキスト', fileUrl: '', fileSize: '', contentSummary: '', tags: [], createdBy: '', status: 'active' });
+      // 再取得
+      await loadKnowledge();
+    } catch (e) {
+      alert(e.message);
+    }
+    setIsKnowledgeSubmitting(false);
+  };
+
+  // Knowledge削除
+  const handleKnowledgeDelete = async (knowledge) => {
+    if (!window.confirm('本当にこのナレッジを削除しますか？')) return;
+    setIsKnowledgeSubmitting(true);
+    try {
+      await deleteKnowledge(knowledge.knowledgeId);
+      await loadKnowledge();
+    } catch (e) {
+      alert(e.message);
+    }
+    setIsKnowledgeSubmitting(false);
+  };
+
+  // ナレッジ検索の実行
+  const handleKnowledgeSearch = () => {
+    loadKnowledge();
+  };
+
+  // ファイルアップロード処理の改善
+  const handleKnowledgeFileUpload = (event) => {
+    const files = Array.from(event.target.files);
+    
+    files.forEach(async (file) => {
+      try {
+        // ファイル情報からナレッジオブジェクトを作成
+        const knowledgeData = {
+          title: file.name.replace(/\.[^/.]+$/, ""), // 拡張子を除いたファイル名
+          description: `アップロードされたファイル: ${file.name}`,
+          category: '製品情報', // デフォルトカテゴリ
+          fileType: getFileTypeFromExtension(file.name),
+          fileUrl: `https://s3.amazonaws.com/yarisugi-docs/${file.name}`, // 実際のS3 URLに置き換える
+          fileSize: formatFileSize(file.size),
+          contentSummary: 'ファイルアップロードにより作成されたナレッジ',
+          tags: [getFileTypeFromExtension(file.name), 'アップロード'],
+          createdBy: '自動アップロード',
+          status: 'active'
+        };
+
+        // APIに送信
+        await createKnowledge(knowledgeData);
+        
+        // 一覧を再読み込み
+        await loadKnowledge();
+        
+        alert(`${file.name} をナレッジとして追加しました！`);
+      } catch (e) {
+        alert(`${file.name} のアップロードに失敗しました: ${e.message}`);
+      }
+    });
+  };
+
+  // ファイルタイプ判定
+  const getFileTypeFromExtension = (filename) => {
+    const ext = filename.split('.').pop().toLowerCase();
+    if (['pdf'].includes(ext)) return 'PDF';
+    if (['doc', 'docx'].includes(ext)) return 'Word';
+    if (['xls', 'xlsx'].includes(ext)) return 'Excel';
+    if (['ppt', 'pptx'].includes(ext)) return 'PowerPoint';
+    return 'テキスト';
+  };
+
+  // ファイルサイズフォーマット
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
   };
 
   return (
@@ -1125,68 +1317,172 @@ const YarisugiDashboard = () => {
                     <p className="text-gray-700 mb-1 font-medium">事業資料をアップロード</p>
                     <p className="text-sm text-gray-600 mb-3">PDF、Word、Excel、PowerPointファイル対応</p>
                     <label className="bg-purple-500 text-white px-6 py-3 rounded-lg cursor-pointer hover:bg-purple-600 transition-colors inline-block">
-                      <input type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" />
+                      <input type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={handleKnowledgeFileUpload} />
                       📂 ファイル選択
                     </label>
                   </div>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-3">📝 テキスト入力</h2>
-                  <textarea rows="10" placeholder="ナレッジとして活用したい情報を入力してください..." className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-vertical" value={databaseText} onChange={(e)=>setDatabaseText(e.target.value)} />
-                  <Button className="w-full mt-3" onClick={handleDatabaseTextSubmit}>🤖 テキストからナレッジ生成</Button>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-3">📝 新規ナレッジ作成</h2>
+                  <div className="space-y-3">
+                    <p className="text-gray-600 text-sm">手動でナレッジを作成・管理できます</p>
+                    <Button onClick={openNewKnowledgeModal} className="w-full">+ 新規ナレッジ作成</Button>
+                  </div>
                 </div>
               </div>
 
-              {/* 登録済みナレッジ（簡略版） */}
+              {/* 検索・フィルター */}
+              <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">🔍 ナレッジ検索・フィルター</h2>
+                <div className="flex flex-col lg:flex-row gap-3 mb-4">
+                  <input 
+                    type="text" 
+                    placeholder="タイトル・説明・タグで検索..." 
+                    value={knowledgeSearchTerm}
+                    onChange={(e) => setKnowledgeSearchTerm(e.target.value)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                  <select 
+                    value={selectedKnowledgeCategory} 
+                    onChange={(e) => setSelectedKnowledgeCategory(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="all">全カテゴリ</option>
+                    <option value="製品情報">製品情報</option>
+                    <option value="価格・契約">価格・契約</option>
+                    <option value="技術情報">技術情報</option>
+                    <option value="サポート">サポート</option>
+                  </select>
+                  <select 
+                    value={selectedKnowledgeFileType} 
+                    onChange={(e) => setSelectedKnowledgeFileType(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="all">全ファイルタイプ</option>
+                    <option value="PDF">PDF</option>
+                    <option value="Word">Word</option>
+                    <option value="Excel">Excel</option>
+                    <option value="PowerPoint">PowerPoint</option>
+                    <option value="テキスト">テキスト</option>
+                  </select>
+                  <select 
+                    value={`${knowledgeSortBy}-${knowledgeSortOrder}`} 
+                    onChange={(e) => {
+                      const [sortBy, sortOrder] = e.target.value.split('-');
+                      setKnowledgeSortBy(sortBy);
+                      setKnowledgeSortOrder(sortOrder);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="createdAt-desc">作成日順（新しい順）</option>
+                    <option value="createdAt-asc">作成日順（古い順）</option>
+                    <option value="updatedAt-desc">更新日順（新しい順）</option>
+                    <option value="accessCount-desc">アクセス数順（多い順）</option>
+                    <option value="fileSize-desc">ファイルサイズ順（大きい順）</option>
+                  </select>
+                  <Button size="sm" onClick={handleKnowledgeSearch}>🔍 検索</Button>
+                </div>
+              </div>
+
+              {/* 登録済みナレッジ */}
               <div className="bg-white rounded-xl shadow-sm">
                 <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-gray-900">登録済みナレッジ</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">登録済みナレッジ ({knowledge.length}件)</h2>
                   <div className="flex gap-3">
-                    <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
-                      <option>全カテゴリ</option>
-                      <option>製品情報</option>
-                      <option>価格・契約</option>
-                      <option>技術情報</option>
-                      <option>サポート</option>
-                    </select>
-                    <input type="text" placeholder="ナレッジを検索..." className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                    <Button size="sm" onClick={loadKnowledge}>🔄 更新</Button>
+                    <Button size="sm" onClick={openNewKnowledgeModal}>+ 新規作成</Button>
                   </div>
                 </div>
 
                 <div className="divide-y divide-gray-200">
-                  {[
-                    {cat:'製品情報', tag:'PDF', title:'Yarisugiシステム概要資料', desc:'システムの基本機能、価格体系、導入事例を含む包括的な資料。営業活動で最も利用頻度の高いドキュメント。', meta:'アップロード日: 2024-01-10 • 2.3MB'},
-                    {cat:'価格・契約', tag:'テキスト', title:'料金体系と契約条件', desc:'基本料金、オプション料金、支払い条件、契約期間、解約条件などの詳細情報。', meta:'登録日: 2024-01-08 • 1,250文字'},
-                    {cat:'技術情報', tag:'Word', title:'API連携仕様書', desc:'外部システムとのAPI連携に関する技術仕様や設定方法。', meta:'アップロード日: 2024-01-05 • 1.8MB'}
-                  ].map((k,i)=>(
-                    <div key={i} className="p-4 sm:p-6 hover:bg-gray-50">
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">{k.cat}</span>
-                            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">{k.tag}</span>
+                  {knowledge.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <p className="text-lg">ナレッジが見つかりません</p>
+                      <p className="text-sm mt-1">新しいナレッジを追加してください</p>
+                    </div>
+                  ) : (
+                    knowledge.map((k, i) => (
+                      <div key={k.knowledgeId || i} className="p-4 sm:p-6 hover:bg-gray-50">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                k.category === '製品情報' ? 'bg-blue-100 text-blue-800' :
+                                k.category === '価格・契約' ? 'bg-green-100 text-green-800' :
+                                k.category === '技術情報' ? 'bg-purple-100 text-purple-800' :
+                                'bg-orange-100 text-orange-800'
+                              }`}>
+                                {k.category}
+                              </span>
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                k.fileType === 'PDF' ? 'bg-red-100 text-red-800' :
+                                k.fileType === 'Word' ? 'bg-blue-100 text-blue-800' :
+                                k.fileType === 'Excel' ? 'bg-green-100 text-green-800' :
+                                k.fileType === 'PowerPoint' ? 'bg-orange-100 text-orange-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {k.fileType}
+                              </span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                k.status === 'active' ? 'bg-green-100 text-green-700' :
+                                k.status === 'inactive' ? 'bg-red-100 text-red-700' :
+                                'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {k.status === 'active' ? '公開中' : 
+                                 k.status === 'inactive' ? '非公開' : 
+                                 k.status === 'draft' ? '下書き' : k.status}
+                              </span>
+                            </div>
+                            <h3 className="font-semibold text-gray-900 mb-1">{k.title}</h3>
+                            <p className="text-sm text-gray-600 mb-2">{k.description}</p>
+                            {k.contentSummary && (
+                              <p className="text-xs text-gray-500 mb-2">要約: {k.contentSummary}</p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                              {k.fileSize && <span>サイズ: {k.fileSize}</span>}
+                              {k.accessCount !== undefined && <span>アクセス: {k.accessCount}回</span>}
+                              {k.createdBy && <span>作成者: {k.createdBy}</span>}
+                              {k.createdAt && (
+                                <span>作成: {new Date(k.createdAt).toLocaleString('ja-JP')}</span>
+                              )}
+                            </div>
+                            {k.tags && k.tags.length > 0 && (
+                              <div className="mt-2">
+                                <span className="text-xs text-gray-500 mr-1">タグ:</span>
+                                {k.tags.map((tag, index) => (
+                                  <span key={index} className="text-xs bg-gray-100 text-gray-600 px-1 py-0.5 rounded mr-1">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {k.fileUrl && (
+                              <div className="mt-2">
+                                <a href={k.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-600 hover:text-purple-800 underline">
+                                  📎 ファイルを開く
+                                </a>
+                              </div>
+                            )}
                           </div>
-                          <h3 className="font-semibold text-gray-900 mb-1">{k.title}</h3>
-                          <p className="text-sm text-gray-600">{k.desc}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="secondary">編集</Button>
-                          <Button size="sm" variant="secondary">削除</Button>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => openEditKnowledgeModal(k)}>編集</Button>
+                            <Button size="sm" variant="danger" onClick={() => handleKnowledgeDelete(k)} disabled={isKnowledgeSubmitting}>削除</Button>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-xs text-gray-500 mt-2">{k.meta}</div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
 
-                <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                  <div className="text-sm text-gray-500">全 28 件のナレッジが登録されています</div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="secondary">前へ</Button>
-                    <Button size="sm" variant="secondary">次へ</Button>
+                {knowledge.length > 0 && (
+                  <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                    <div className="text-sm text-gray-500">全 {knowledge.length} 件のナレッジが登録されています</div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="secondary">エクスポート</Button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -1506,6 +1802,101 @@ const YarisugiDashboard = () => {
               <Button onClick={handleCustomerSubmit} disabled={isSubmitting}>{editingCustomer ? '更新' : '登録'}</Button>
               {editingCustomer && <Button variant="danger" onClick={() => handleCustomerDelete(editingCustomer)} disabled={isSubmitting}>削除</Button>}
               <Button variant="secondary" onClick={() => setShowCustomerModal(false)} disabled={isSubmitting}>キャンセル</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Knowledge編集・作成モーダル */}
+      {showKnowledgeModal && (
+        <Modal onClose={() => setShowKnowledgeModal(false)} title={editingKnowledge ? 'ナレッジ編集' : 'ナレッジ新規作成'}>
+          <div className="space-y-4">
+            <FormGroup label="タイトル">
+              <Input 
+                value={knowledgeForm.title} 
+                onChange={v => handleKnowledgeFormChange('title', v)} 
+                placeholder="ナレッジのタイトルを入力" 
+              />
+            </FormGroup>
+            <FormGroup label="説明">
+              <textarea 
+                value={knowledgeForm.description} 
+                onChange={(e) => handleKnowledgeFormChange('description', e.target.value)} 
+                rows="4" 
+                placeholder="ナレッジの詳細説明を入力" 
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500" 
+              />
+            </FormGroup>
+            <FormGroup label="カテゴリ">
+              <Select 
+                value={knowledgeForm.category} 
+                onChange={(v) => handleKnowledgeFormChange('category', v)} 
+                options={['製品情報', '価格・契約', '技術情報', 'サポート']} 
+              />
+            </FormGroup>
+            <FormGroup label="ファイルタイプ">
+              <Select 
+                value={knowledgeForm.fileType} 
+                onChange={(v) => handleKnowledgeFormChange('fileType', v)} 
+                options={['PDF', 'Word', 'Excel', 'PowerPoint', 'テキスト']} 
+              />
+            </FormGroup>
+            <FormGroup label="ファイルURL">
+              <Input 
+                value={knowledgeForm.fileUrl} 
+                onChange={v => handleKnowledgeFormChange('fileUrl', v)} 
+                placeholder="https://example.com/file.pdf" 
+              />
+            </FormGroup>
+            <FormGroup label="ファイルサイズ">
+              <Input 
+                value={knowledgeForm.fileSize} 
+                onChange={v => handleKnowledgeFormChange('fileSize', v)} 
+                placeholder="例: 2.3MB" 
+              />
+            </FormGroup>
+            <FormGroup label="コンテンツ要約">
+              <textarea 
+                value={knowledgeForm.contentSummary} 
+                onChange={(e) => handleKnowledgeFormChange('contentSummary', e.target.value)} 
+                rows="3" 
+                placeholder="ナレッジの内容要約を入力" 
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500" 
+              />
+            </FormGroup>
+            <FormGroup label="タグ（カンマ区切り）">
+              <Input 
+                value={Array.isArray(knowledgeForm.tags) ? knowledgeForm.tags.join(', ') : knowledgeForm.tags} 
+                onChange={(v) => handleKnowledgeFormChange('tags', v.split(',').map(tag => tag.trim()).filter(tag => tag))} 
+                placeholder="例: システム概要, 価格, 事例" 
+              />
+            </FormGroup>
+            <FormGroup label="作成者">
+              <Input 
+                value={knowledgeForm.createdBy} 
+                onChange={v => handleKnowledgeFormChange('createdBy', v)} 
+                placeholder="作成者名を入力" 
+              />
+            </FormGroup>
+            <FormGroup label="ステータス">
+              <Select 
+                value={knowledgeForm.status} 
+                onChange={(v) => handleKnowledgeFormChange('status', v)} 
+                options={['active', 'inactive', 'draft']} 
+              />
+            </FormGroup>
+            <div className="flex gap-3 pt-2">
+              <Button onClick={handleKnowledgeSubmit} disabled={isKnowledgeSubmitting}>
+                {editingKnowledge ? '更新' : '作成'}
+              </Button>
+              {editingKnowledge && (
+                <Button variant="danger" onClick={() => handleKnowledgeDelete(editingKnowledge)} disabled={isKnowledgeSubmitting}>
+                  削除
+                </Button>
+              )}
+              <Button variant="secondary" onClick={() => setShowKnowledgeModal(false)} disabled={isKnowledgeSubmitting}>
+                キャンセル
+              </Button>
             </div>
           </div>
         </Modal>
