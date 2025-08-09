@@ -10,7 +10,8 @@
 - **AI統合**: アップロードされたコンテンツから自動的にFAQを生成
 - **レポート機能**: 包括的なビジネスレポートを生成
 - **レスポンシブデザイン**: モバイルフレンドリーなインターフェースのモダンUI
-- **API連携**: RESTful APIを使用した顧客データの管理
+- **API連携**: RESTful APIを使用した顧客・FAQ データの管理
+- **検索・フィルター**: 高度な検索・ソート・カテゴリフィルター機能
 
 ## 技術スタック
 
@@ -18,7 +19,9 @@
 - **ビルドツール**: Vite 7.0.4
 - **スタイリング**: モダンデザインパターンを使用したCSS
 - **リンティング**: React固有のルールを含むESLint
-- **API**: RESTful API（Lambda + API Gateway）
+- **バックエンド**: AWS Lambda (Python) + API Gateway
+- **データベース**: AWS DynamoDB
+- **API**: RESTful API アーキテクチャ
 
 ## はじめに
 
@@ -82,6 +85,12 @@ src/
 - ドキュメントからのAI駆動FAQ生成
 - 検索・フィルター機能
 - カスタムカテゴリサポート
+- **API連携**: DynamoDB + Lambda による完全なCRUD操作
+  - FAQ一覧取得・検索・ソート（GET /faqs）
+  - 新規FAQ作成（POST /faqs）
+  - FAQ詳細取得・使用回数カウント（GET /faqs/{id}）
+  - FAQ更新（PUT /faqs/{id}）
+  - FAQ削除（DELETE /faqs/{id}）
 
 ### ドキュメント処理
 - 様々なファイル形式のアップロード
@@ -89,6 +98,14 @@ src/
 - アップロードされたコンテンツからの自動FAQ生成
 
 ## 最近の更新
+
+### v1.2.0 - FAQ API統合
+- **FAQ管理APIの実装**: AWS DynamoDB + Lambda + API Gatewayによる完全なFAQ管理システム
+- **高度な検索・フィルター機能**: カテゴリフィルター、キーワード検索、多様なソート機能
+- **リアルタイムFAQ管理**: API連携による動的なFAQ追加・編集・削除
+- **AI生成FAQの統合**: データベース作成モーダルとAIアシストモーダルからの直接FAQ保存
+- **DynamoDB予約語対応**: すべての一般的な予約語に対応した堅牢なAPI設計
+- **使用統計機能**: FAQ使用回数の自動カウント・トラッキング
 
 ### v1.1.0 - API連携の実装
 - **顧客管理APIの統合**: Lambda + API Gatewayを使用したRESTful APIとの連携
@@ -112,7 +129,23 @@ src/
   - `PUT /customers/{id}` - 顧客情報更新
   - `DELETE /customers/{id}` - 顧客情報削除
 
+### FAQ管理API
+- **ベースURL**: `https://hj1ym65wjk.execute-api.ap-northeast-1.amazonaws.com/prod`
+- **エンドポイント**:
+  - `GET /faqs` - FAQ一覧取得（クエリパラメータ: category, sortBy, sortOrder）
+  - `POST /faqs` - 新規FAQ作成
+  - `GET /faqs/{id}` - FAQ詳細取得（使用回数自動インクリメント）
+  - `PUT /faqs/{id}` - FAQ更新
+  - `DELETE /faqs/{id}` - FAQ削除
+
+#### FAQクエリパラメータ
+- `category`: カテゴリフィルター（料金、機能、サポート、契約、その他）
+- `sortBy`: ソート項目（createdAt、updatedAt、usageCount）
+- `sortOrder`: ソート順序（asc、desc）
+
 ### データ構造
+
+#### 顧客データ
 ```json
 {
   "customerId": "string",
@@ -130,6 +163,43 @@ src/
 }
 ```
 
+#### FAQデータ
+```json
+{
+  "faqId": "string",
+  "question": "string",
+  "answer": "string",
+  "category": "string",
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string",
+  "source": "string",
+  "status": "string",
+  "usageCount": "number",
+  "tags": ["string"]
+}
+```
+
+## AWS アーキテクチャ
+
+### DynamoDB テーブル
+- **FAQs テーブル**: 
+  - 主キー: `faqId` (String)
+  - 課金モード: PAY_PER_REQUEST
+  - 予約語対応: source, status, tags, comment, data, timestamp
+
+### Lambda 関数
+- **言語**: Python 3.13
+- **実行時間**: ~300ms 平均
+- **メモリ**: 128MB
+- **権限**: DynamoDB フルアクセス + CloudWatch Logs
+
+### API Gateway
+- **タイプ**: REST API
+- **CORS**: 有効（全オリジン対応）
+- **認証**: なし（開発環境）
+- **ステージ**: prod
+
 ## 開発者向け情報
 
 ### レスポンシブデザイン
@@ -141,6 +211,20 @@ src/
 - React Hooks（useState, useEffect）を使用
 - モーダル状態の管理
 - API通信状態の管理
+- FAQ検索・フィルター状態の管理
+
+### エラーハンドリング
+- API通信エラーの適切な処理
+- DynamoDB予約語エラーの自動解決
+- JSON シリアライゼーションエラー対応
+- ユーザーフレンドリーなエラーメッセージ
+
+## トラブルシューティング
+
+### よくある問題
+1. **CORS エラー**: API Gateway でCORS設定が有効になっていることを確認
+2. **DynamoDB アクセス拒否**: Lambda実行ロールにDynamoDB権限が付与されていることを確認
+3. **予約語エラー**: 最新のLambda関数が予約語対応版になっていることを確認
 
 ## コントリビューション
 
