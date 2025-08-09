@@ -137,6 +137,184 @@ async function deleteKnowledge(id) {
   return result.success;
 }
 
+// === S3アップロード用API通信関数 ===
+async function getPresignedUrl(filename, contentType, fileSize) {
+  console.log('🔍 プリサインドURL取得開始');
+  console.log('- リクエストパラメータ:', {
+    filename,
+    contentType,
+    fileSize,
+    endpoint: `${KNOWLEDGE_API_BASE}/upload/presigned-url`
+  });
+
+  try {
+    const requestData = { filename, contentType, fileSize };
+    console.log('📤 送信データ:', JSON.stringify(requestData, null, 2));
+
+    const res = await fetch(`${KNOWLEDGE_API_BASE}/upload/presigned-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestData),
+    });
+
+    console.log('📥 レスポンス受信:', {
+      status: res.status,
+      statusText: res.statusText,
+      headers: Object.fromEntries(res.headers.entries())
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('❌ プリサインドURL取得エラー:', {
+        status: res.status,
+        statusText: res.statusText,
+        body: errorText
+      });
+      throw new Error(`プリサインドURL取得に失敗しました: ${res.status} ${res.statusText}`);
+    }
+
+    const result = await res.json();
+    console.log('✅ プリサインドURL取得成功:', JSON.stringify(result, null, 2));
+
+    if (result.success && result.data) {
+      console.log('🔍 プリサインドURL詳細解析:');
+      const urlData = result.data;
+      console.log('- プリサインドURL:', urlData.presignedUrl);
+      console.log('- ファイルURL:', urlData.fileUrl);
+      console.log('- バケット:', urlData.bucket);
+      console.log('- リージョン:', urlData.region);
+
+      // URLの詳細解析
+      if (urlData.presignedUrl) {
+        try {
+          const url = new URL(urlData.presignedUrl);
+          console.log('🔍 URL構造解析:', {
+            hostname: url.hostname,
+            pathname: url.pathname,
+            search: url.search.substring(0, 100) + '...',
+            hasRegion: url.hostname.includes('ap-northeast-1')
+          });
+        } catch (e) {
+          console.error('URL解析エラー:', e);
+        }
+      }
+    }
+
+    return result.success ? result.data : null;
+  } catch (error) {
+    console.error('❌ プリサインドURL取得で例外発生:', error);
+    throw error;
+  }
+}
+
+async function uploadToS3(presignedUrl, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    console.log('🚀 S3アップロード開始');
+    console.log('🔍 S3アップロード詳細:');
+    console.log('- プリサインドURL:', presignedUrl);
+    console.log('- ファイル名:', file.name);
+    console.log('- ファイルタイプ:', file.type);
+    console.log('- ファイルサイズ:', file.size);
+    
+    // URL解析
+    try {
+      const url = new URL(presignedUrl);
+      console.log('🔍 アップロードURL解析:', {
+        hostname: url.hostname,
+        pathname: url.pathname,
+        protocol: url.protocol,
+        hasRegion: url.hostname.includes('ap-northeast-1'),
+        isS3: url.hostname.includes('s3')
+      });
+    } catch (e) {
+      console.error('❌ URL解析エラー:', e);
+    }
+    
+    const xhr = new XMLHttpRequest();
+    
+    // XMLHttpRequestイベントの詳細ログ
+    xhr.addEventListener('loadstart', () => {
+      console.log('📡 XMLHttpRequest開始');
+    });
+
+    xhr.addEventListener('readystatechange', () => {
+      console.log('🔄 ReadyState変更:', {
+        readyState: xhr.readyState,
+        status: xhr.status,
+        statusText: xhr.statusText
+      });
+    });
+    
+    // 進捗イベント
+    if (onProgress) {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          console.log(`📊 アップロード進捗: ${percentComplete.toFixed(1)}% (${e.loaded}/${e.total})`);
+          onProgress(percentComplete);
+        }
+      });
+    }
+    
+    xhr.addEventListener('load', () => {
+      console.log('✅ XMLHttpRequest完了:', {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        responseHeaders: xhr.getAllResponseHeaders(),
+        responseText: xhr.responseText ? xhr.responseText.substring(0, 200) : 'なし'
+      });
+
+      if (xhr.status === 200) {
+        console.log('🎉 S3アップロード成功!');
+        resolve(true);
+      } else {
+        console.error('❌ S3アップロードエラー:', {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          responseText: xhr.responseText
+        });
+        reject(new Error(`S3アップロードに失敗しました: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+    
+    xhr.addEventListener('error', (e) => {
+      console.error('❌ S3アップロードネットワークエラー:', {
+        event: e,
+        status: xhr.status,
+        statusText: xhr.statusText,
+        readyState: xhr.readyState
+      });
+      reject(new Error('S3アップロードでネットワークエラーが発生しました'));
+    });
+
+    xhr.addEventListener('abort', () => {
+      console.error('❌ S3アップロードが中断されました');
+      reject(new Error('S3アップロードが中断されました'));
+    });
+
+    xhr.addEventListener('timeout', () => {
+      console.error('❌ S3アップロードがタイムアウトしました');
+      reject(new Error('S3アップロードがタイムアウトしました'));
+    });
+    
+    console.log('🔧 XMLHttpRequest設定中...');
+    console.log('- メソッド: PUT');
+    console.log('- URL:', presignedUrl);
+    console.log('- Content-Type:', file.type);
+
+    try {
+      xhr.open('PUT', presignedUrl);
+      xhr.setRequestHeader('Content-Type', file.type);
+      
+      console.log('📤 ファイル送信開始...');
+      xhr.send(file);
+    } catch (e) {
+      console.error('❌ XMLHttpRequest設定エラー:', e);
+      reject(new Error(`XMLHttpRequest設定エラー: ${e.message}`));
+    }
+  });
+}
+
 const YarisugiDashboard = () => {
   const [activePage, setActivePage] = useState('top');
   const [showApproval, setShowApproval] = useState(false);
@@ -217,6 +395,9 @@ const YarisugiDashboard = () => {
   const [selectedKnowledgeFileType, setSelectedKnowledgeFileType] = useState('all');
   const [knowledgeSortBy, setKnowledgeSortBy] = useState('createdAt');
   const [knowledgeSortOrder, setKnowledgeSortOrder] = useState('desc');
+
+  // S3アップロード進捗管理用のstate
+  const [uploadingFiles, setUploadingFiles] = useState([]);
 
   // 顧客一覧取得
   useEffect(() => {
@@ -459,8 +640,8 @@ const YarisugiDashboard = () => {
   };
 
   const handleFaqFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) setUploadedContent(`ファイル: ${file.name} がアップロードされました`);
+    const files = Array.from(event.target.files);
+    if (files.length > 0) setUploadedContent(`ファイル: ${files[0].name} がアップロードされました`);
   };
   const handleFaqTextInput = (text) => { if (text.trim()) setUploadedContent(text); };
   const updateGeneratedFaq = (id, field, value) => {
@@ -626,37 +807,155 @@ const YarisugiDashboard = () => {
     loadKnowledge();
   };
 
-  // ファイルアップロード処理の改善
-  const handleKnowledgeFileUpload = (event) => {
+  // ファイルアップロード処理の改善（デバッグ強化版）
+  const handleKnowledgeFileUpload = async (event) => {
     const files = Array.from(event.target.files);
     
-    files.forEach(async (file) => {
+    console.log('🎯 ===================== ファイルアップロード処理開始 =====================');
+    console.log('📁 選択されたファイル数:', files.length);
+    console.log('📁 ファイル一覧:', files.map(f => ({
+      name: f.name,
+      type: f.type,
+      size: f.size,
+      lastModified: new Date(f.lastModified).toISOString()
+    })));
+    
+    for (const [index, file] of files.entries()) {
+      const fileId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      console.log(`\n🚀 ファイル ${index + 1}/${files.length} 処理開始:`, file.name);
+      console.log('📋 ファイル詳細:', {
+        id: fileId,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        formattedSize: formatFileSize(file.size)
+      });
+      
       try {
-        // ファイル情報からナレッジオブジェクトを作成
+        console.log(`⭐ ステップ1: アップロード状態管理追加`);
+        
+        // アップロード進捗状態を追加
+        setUploadingFiles(prev => {
+          const newState = [...prev, {
+            id: fileId,
+            name: file.name,
+            size: formatFileSize(file.size),
+            progress: 0,
+            status: 'uploading'
+          }];
+          console.log('📊 アップロード状態更新:', newState);
+          return newState;
+        });
+        
+        console.log(`⭐ ステップ2: プリサインドURL取得開始`);
+        console.log('- API呼び出しパラメータ:', {
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size
+        });
+        
+        const urlData = await getPresignedUrl(file.name, file.type, file.size);
+        
+        if (!urlData) {
+          throw new Error('プリサインドURL取得に失敗しました: urlDataがnull');
+        }
+        
+        console.log('✅ プリサインドURL取得完了');
+        console.log('🔗 取得したデータ:', JSON.stringify(urlData, null, 2));
+        
+        console.log(`⭐ ステップ3: S3アップロード開始`);
+        
+        await uploadToS3(urlData.presignedUrl, file, (progress) => {
+          console.log(`📈 進捗更新: ${progress.toFixed(1)}%`);
+          setUploadingFiles(prev => prev.map(f => 
+            f.id === fileId ? { ...f, progress: Math.round(progress) } : f
+          ));
+        });
+        
+        console.log('✅ S3アップロード完了');
+        
+        console.log(`⭐ ステップ4: ナレッジオブジェクト作成`);
+        
+        // アップロード完了状態に更新
+        setUploadingFiles(prev => prev.map(f => 
+          f.id === fileId ? { ...f, progress: 100, status: 'creating' } : f
+        ));
+        
+        // ナレッジオブジェクトを作成
         const knowledgeData = {
           title: file.name.replace(/\.[^/.]+$/, ""), // 拡張子を除いたファイル名
-          description: `アップロードされたファイル: ${file.name}`,
+          description: `S3にアップロードされたファイル: ${file.name}`,
           category: '製品情報', // デフォルトカテゴリ
           fileType: getFileTypeFromExtension(file.name),
-          fileUrl: `https://s3.amazonaws.com/yarisugi-docs/${file.name}`, // 実際のS3 URLに置き換える
+          fileUrl: urlData.fileUrl, // 実際のS3 URL
           fileSize: formatFileSize(file.size),
-          contentSummary: 'ファイルアップロードにより作成されたナレッジ',
-          tags: [getFileTypeFromExtension(file.name), 'アップロード'],
-          createdBy: '自動アップロード',
+          contentSummary: 'S3にアップロードされたファイルから作成されたナレッジ',
+          tags: [getFileTypeFromExtension(file.name), 'S3アップロード'],
+          createdBy: 'ファイルアップロード',
           status: 'active'
         };
 
-        // APIに送信
+        console.log('📝 作成するナレッジデータ:', JSON.stringify(knowledgeData, null, 2));
+
+        console.log(`⭐ ステップ5: Knowledge API登録`);
         await createKnowledge(knowledgeData);
+        console.log('✅ ナレッジAPI登録完了');
         
-        // 一覧を再読み込み
-        await loadKnowledge();
+        console.log(`⭐ ステップ6: 完了状態更新`);
+        // 完了状態に更新
+        setUploadingFiles(prev => prev.map(f => 
+          f.id === fileId ? { ...f, status: 'completed' } : f
+        ));
         
-        alert(`${file.name} をナレッジとして追加しました！`);
+        console.log(`🎉 ${file.name} のアップロード処理が完全に完了しました!`);
+        
       } catch (e) {
-        alert(`${file.name} のアップロードに失敗しました: ${e.message}`);
+        console.error(`💥 ${file.name} のアップロードでエラー発生:`);
+        console.error('- エラータイプ:', e.constructor.name);
+        console.error('- エラーメッセージ:', e.message);
+        console.error('- エラースタック:', e.stack);
+        
+        // エラー状態に更新
+        setUploadingFiles(prev => prev.map(f => 
+          f.id === fileId ? { 
+            ...f, 
+            status: 'error', 
+            error: e.message,
+            progress: 0
+          } : f
+        ));
+        
+        console.error(`❌ ${file.name} の処理を中断します`);
       }
-    });
+    }
+    
+    console.log('🔄 アップロード処理完了後のクリーンアップ開始');
+    
+    // 5秒後に完了したアップロードを一覧から削除
+    setTimeout(() => {
+      console.log('🧹 完了済みアップロードをクリーンアップ中...');
+      setUploadingFiles(prev => {
+        const remaining = prev.filter(f => f.status === 'uploading' || f.status === 'creating');
+        console.log('🧹 クリーンアップ後の残存ファイル:', remaining);
+        return remaining;
+      });
+    }, 5000);
+    
+    console.log('🔄 ナレッジ一覧再読み込み開始');
+    // 一覧を再読み込み
+    try {
+      await loadKnowledge();
+      console.log('✅ ナレッジ一覧再読み込み完了');
+    } catch (e) {
+      console.error('❌ ナレッジ一覧再読み込みエラー:', e);
+    }
+    
+    // ファイル選択をリセット
+    event.target.value = '';
+    console.log('🔄 ファイル選択状態リセット完了');
+    
+    console.log('🏁 ===================== ファイルアップロード処理終了 =====================\n');
   };
 
   // ファイルタイプ判定
@@ -1331,6 +1630,56 @@ const YarisugiDashboard = () => {
                   </div>
                 </div>
               </div>
+
+              {/* ファイルアップロード進捗表示 */}
+              {uploadingFiles.length > 0 && (
+                <div className="bg-blue-50 rounded-xl shadow-sm p-4 sm:p-6 border border-blue-200">
+                  <h3 className="text-lg font-semibold text-blue-800 mb-4">📤 ファイルアップロード進捗</h3>
+                  <div className="space-y-3">
+                    {uploadingFiles.map((file) => (
+                      <div key={file.id} className="bg-white rounded-lg p-4 border border-blue-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-3 h-3 rounded-full ${
+                              file.status === 'uploading' ? 'bg-blue-500 animate-pulse' :
+                              file.status === 'creating' ? 'bg-yellow-500 animate-pulse' :
+                              file.status === 'completed' ? 'bg-green-500' :
+                              'bg-red-500'
+                            }`}></div>
+                            <span className="font-medium text-gray-900">{file.name}</span>
+                            <span className="text-sm text-gray-500">({file.size})</span>
+                          </div>
+                          <div className="text-sm font-medium">
+                            {file.status === 'uploading' && `${file.progress}%`}
+                            {file.status === 'creating' && 'ナレッジ作成中...'}
+                            {file.status === 'completed' && '✅ 完了'}
+                            {file.status === 'error' && '❌ エラー'}
+                          </div>
+                        </div>
+                        
+                        {/* プログレスバー */}
+                        {(file.status === 'uploading' || file.status === 'creating') && (
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-300 ${
+                                file.status === 'uploading' ? 'bg-blue-500' : 'bg-yellow-500'
+                              }`}
+                              style={{ width: `${file.progress}%` }}
+                            ></div>
+                          </div>
+                        )}
+                        
+                        {/* エラーメッセージ */}
+                        {file.status === 'error' && file.error && (
+                          <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">
+                            エラー: {file.error}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 検索・フィルター */}
               <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">

@@ -105,6 +105,16 @@ src/
 
 ## 最近の更新
 
+### v1.4.0 - S3ファイルアップロード統合
+- **S3直接アップロード機能**: プリサインドURLを使用したセキュアなファイルアップロード
+- **リアルタイム進捗表示**: アップロード進捗のリアルタイム表示とステータス管理
+- **完全なファイル処理フロー**: S3アップロード → ナレッジ自動作成の統合フロー
+- **エラーハンドリング強化**: アップロード失敗時の詳細エラー表示と再試行機能
+- **ファイル形式検証**: 許可されたファイル形式（PDF、Word、Excel、PowerPoint）の自動検証
+- **ファイルサイズ制限**: 50MB制限とファイルサイズ事前チェック機能
+- **パブリックアクセス対応**: S3バケットのパブリックアクセス設定完了でファイル直接参照可能
+- **UIリアルタイム更新**: アップロード状態、進捗バー、成功/エラーメッセージの改善
+
 ### v1.3.0 - Knowledge API統合
 - **ナレッジ管理APIの実装**: AWS DynamoDB + Lambda + API Gatewayによる完全なナレッジ管理システム
 - **ファイルアップロード機能**: PDF、Word、Excel、PowerPointファイルの自動ナレッジ化
@@ -165,6 +175,7 @@ src/
   - `GET /knowledge/{id}` - ナレッジ詳細取得（アクセス回数自動インクリメント）
   - `PUT /knowledge/{id}` - ナレッジ更新
   - `DELETE /knowledge/{id}` - ナレッジ削除
+  - `POST /upload/presigned-url` - S3プリサインドURL生成（ファイルアップロード用）
 
 #### Knowledgeクエリパラメータ
 - `category`: カテゴリフィルター（製品情報、価格・契約、技術情報、サポート）
@@ -244,11 +255,22 @@ src/
   - 課金モード: PAY_PER_REQUEST
   - 予約語対応: status, data, timestamp, size
 
+### S3バケット
+- **バケット名**: `yarisugi-knowledge-files`
+- **リージョン**: ap-northeast-1
+- **CORS設定**: 有効（フロントエンドからの直接アップロード対応）
+- **パブリックアクセス**: 有効（Block Public Access設定を無効化済み）
+- **バケットポリシー**: パブリック読み取りアクセス許可（`s3:GetObject`）
+- **Object Ownership**: Bucket owner preferred
+- **アクセス制御**: Lambda関数による読み書き権限
+- **ファイル構造**: `knowledge/{timestamp}_{uuid}_{filename}`
+- **セキュリティ**: プリサインドURLによる安全なアップロード
+
 ### Lambda 関数
 - **言語**: Python 3.13
 - **実行時間**: ~300ms 平均
 - **メモリ**: 128MB
-- **権限**: DynamoDB フルアクセス + CloudWatch Logs
+- **権限**: DynamoDB フルアクセス + CloudWatch Logs + S3 読み書き権限
 
 ### API Gateway
 - **タイプ**: REST API
